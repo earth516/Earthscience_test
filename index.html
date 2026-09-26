@@ -370,14 +370,14 @@ function renderSidebar() {
       <div class="px-2 mb-1 text-[13px] font-black text-slate-800">${big.title}</div>
       ${big.groups.map((g, gi) => {
         if (!g.title) return g.units.map(u => unitBtn(u)).join('');
-        const key = `${bi}-${gi}`, open = expandedGroups.has(key);
+        const key = `${bi}-${gi}`, open = expandedGroups.has(key), gActive = currentUnit === 'grp:' + key;
         const total = g.units.reduce((s, u) => s + unitN(u.code), 0);
         return `
-          <button onclick="toggleGroup('${key}')" class="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[13px] font-bold text-slate-700 hover:bg-slate-50">
-            <span class="flex-shrink-0 text-slate-400 text-[10px] transition-transform inline-block ${open ? 'rotate-90' : ''}">▶</span>
-            <span class="flex-1 leading-snug">${g.title}</span>
-            <span class="flex-shrink-0 text-[11px] tabular-nums ${total ? 'text-slate-500' : 'text-slate-300'}">${total}</span>
-          </button>
+          <div onclick="selectGroup(${bi}, ${gi})" class="w-full flex items-center gap-2 text-left rounded-lg text-[13px] font-bold cursor-pointer ${gActive ? '' : 'text-slate-700 hover:bg-slate-50'}" ${gActive ? 'style="background:var(--accent-soft);color:var(--accent)"' : ''}>
+            <button onclick="event.stopPropagation(); toggleGroup('${key}')" class="flex-shrink-0 text-slate-400 text-[10px] transition-transform inline-block px-3 py-2 ${open ? 'rotate-90' : ''}">▶</button>
+            <span class="flex-1 leading-snug py-2">${g.title}</span>
+            <span class="flex-shrink-0 text-[11px] tabular-nums pr-3 ${total ? 'text-slate-500' : 'text-slate-300'}">${total}</span>
+          </div>
           ${open ? g.units.map(u => unitBtn(u)).join('') : ''}`;
       }).join('')}
     </div>`).join('');
@@ -385,6 +385,33 @@ function renderSidebar() {
 window.toggleGroup = function (key) {
   expandedGroups.has(key) ? expandedGroups.delete(key) : expandedGroups.add(key);
   renderSidebar();
+};
+function groupOf_(scope) {   // 'grp:bi-gi' -> 그 그룹 객체
+  const [bi, gi] = scope.slice(4).split('-').map(Number);
+  return CURRICULUM[bi].groups[gi];
+}
+// 그룹(소제목) 헤딩을 누르면: 펼치고 + 그 아래 소단원 문제를 전부 합쳐서 바로 풀 수 있게
+window.selectGroup = function (bi, gi) {
+  expandedGroups.add(`${bi}-${gi}`);
+  const g = CURRICULUM[bi].groups[gi];
+  const codes = g.units.map(u => u.code);
+  const scope = `grp:${bi}-${gi}`;
+  if (currentCat === 'ox') {
+    let items = OX.filter(x => codes.includes(x.code));
+    if (ox.random) items = shuffle([...items]);
+    return startOx(scope, items);
+  }
+  if (currentCat === 'fill') {
+    let items = FILL.filter(x => codes.includes(x.code));
+    if (fill.random) items = shuffle([...items]);
+    return startFill(scope, items);
+  }
+  currentUnit = scope;
+  list = codes.flatMap(code => catQuestions(currentCat, code));
+  page = 1; isRandom = false;
+  setHeader(g.title, `${CATEGORIES[currentCat].title} · ${list.length}문제`);
+  renderSidebar(); renderPage(); closeSidebarMobile();
+  $('scroll-area').scrollTo({ top: 0 });
 };
 
 window.changeCategory = function (cat) {
@@ -619,8 +646,8 @@ function renderCards(questions, target, mock, offset = 0) {
   target.innerHTML = questions.map((q, i) => {
     const u = unitByCode[q.code], book = bookById[q.bookId], cat = CATEGORIES[book.category];
     const label = `${offset + i + 1}번`;
-    // 모의고사에서만 어느 단원 문제인지 표시
-    const badges = mock ? `<span class="px-2 py-1 rounded text-[11px] font-bold bg-slate-100 text-slate-600">${u.title}</span>` : '';
+    // 모의고사이거나, 그룹(소제목) 전체를 합쳐서 볼 때만 어느 소단원 문제인지 표시
+    const badges = (mock || (currentUnit && currentUnit.startsWith('grp:'))) ? `<span class="px-2 py-1 rounded text-[11px] font-bold bg-slate-100 text-slate-600">${u.title}</span>` : '';
     const pen = (mode, color, cls, name) =>
       `<button onclick="setTool('${q.id}','${mode}','${color}',this)" data-tool="${q.id}" aria-label="${name}" class="${cls} ${color === '#111827' ? 'tool-active' : ''}"></button>`;
     return `
@@ -827,14 +854,18 @@ function showOxWelcome() {
 }
 
 window.startOx = function (scope, items) {
+  const isGrp = typeof scope === 'string' && scope.startsWith('grp:');
   currentUnit = scope === 'all' ? null : scope === 'wrong' ? '__wrong' : scope;
   if (!items) {
-    items = scope === 'wrong' ? oxWrongItems() : OX.filter(x => scope === 'all' || x.code === scope);
+    items = scope === 'wrong' ? oxWrongItems()
+      : isGrp ? OX.filter(x => groupOf_(scope).units.some(u => u.code === x.code))
+      : OX.filter(x => scope === 'all' || x.code === scope);
     if (ox.random) items = shuffle([...items]);
   }
   ox = { ...ox, scope, items, idx: 0, right: 0, wrong: [], answered: null };
   const u = unitByCode[scope];
-  setHeader(u ? u.title : scope === 'wrong' ? '틀린 문장 다시 풀기' : 'OX 퀴즈 · 전체', `OX 퀴즈 · ${items.length}문장`);
+  const title = u ? u.title : scope === 'wrong' ? '틀린 문장 다시 풀기' : isGrp ? groupOf_(scope).title : 'OX 퀴즈 · 전체';
+  setHeader(title, `OX 퀴즈 · ${items.length}문장`);
   renderSidebar(); renderOx(); closeSidebarMobile();
   $('scroll-area').scrollTo({ top: 0 });
 };
@@ -915,7 +946,7 @@ function renderOx() {
   };
   content.innerHTML = bar + `
     <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 md:p-8 fade-in">
-      ${ox.scope === 'all' || ox.scope === 'wrong' ? `<p class="text-xs font-bold mb-3" style="color:var(--accent)">${unitByCode[it.code].title}</p>` : ''}
+      ${ox.scope === 'all' || ox.scope === 'wrong' || (typeof ox.scope === 'string' && ox.scope.startsWith('grp:')) ? `<p class="text-xs font-bold mb-3" style="color:var(--accent)">${unitByCode[it.code].title}</p>` : ''}
       <p class="text-lg md:text-xl font-bold text-slate-800 leading-relaxed break-keep">${it.q}</p>
       <div class="grid grid-cols-2 gap-3 mt-6">
         ${oxBtn(true, 'O', 'border-blue-200 text-blue-500 hover:bg-blue-50')}
@@ -1013,14 +1044,18 @@ function showFillWelcome() {
 }
 
 window.startFill = function (scope, items) {
+  const isGrp = typeof scope === 'string' && scope.startsWith('grp:');
   currentUnit = scope === 'all' ? null : scope === 'wrong' ? '__wrong' : scope;
   if (!items) {
-    items = scope === 'wrong' ? fillWrongItems() : FILL.filter(x => scope === 'all' || x.code === scope);
+    items = scope === 'wrong' ? fillWrongItems()
+      : isGrp ? FILL.filter(x => groupOf_(scope).units.some(u => u.code === x.code))
+      : FILL.filter(x => scope === 'all' || x.code === scope);
     if (fill.random) items = shuffle([...items]);
   }
   fill = { ...fill, scope, items, idx: 0, right: 0, wrong: [], answered: null, typed: [] };
   const u = unitByCode[scope];
-  setHeader(u ? u.title : scope === 'wrong' ? '오답 노트 다시 풀기' : '빈칸채우기 · 전체', `빈칸채우기 · ${items.length}문장`);
+  const title = u ? u.title : scope === 'wrong' ? '오답 노트 다시 풀기' : isGrp ? groupOf_(scope).title : '빈칸채우기 · 전체';
+  setHeader(title, `빈칸채우기 · ${items.length}문장`);
   renderSidebar(); renderFill(); closeSidebarMobile();
   $('scroll-area').scrollTo({ top: 0 });
 };
@@ -1118,7 +1153,7 @@ function renderFill() {
   it.parts.forEach((p, i) => { sentenceHtml += p; if (i < nb) sentenceHtml += blankHtml(i); });
   content.innerHTML = bar + `
     <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 md:p-8 fade-in">
-      ${fill.scope === 'all' || fill.scope === 'wrong' ? `<p class="text-xs font-bold mb-3" style="color:var(--accent)">${unitByCode[it.code].title}</p>` : ''}
+      ${fill.scope === 'all' || fill.scope === 'wrong' || (typeof fill.scope === 'string' && fill.scope.startsWith('grp:')) ? `<p class="text-xs font-bold mb-3" style="color:var(--accent)">${unitByCode[it.code].title}</p>` : ''}
       <p class="text-lg md:text-xl font-bold text-slate-800 leading-loose break-keep">${sentenceHtml}</p>
       ${done ? '' : `<div class="mt-5"><button onclick="submitFill()" class="${BTN} text-white border-transparent" style="background:var(--accent)">정답 확인</button></div>`}
       ${done ? `
