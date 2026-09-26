@@ -25,20 +25,22 @@ Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.png' |
     $book = $rel.Substring(0, $i)
     $unit = $rel.Substring($i + 1)
     if (-not $result.Contains($book)) { $result[$book] = [ordered]@{} }
-    if (-not $result[$book].Contains($unit)) { $result[$book][$unit] = [ordered]@{} }
+    if (-not $result[$book].Contains($unit)) { $result[$book][$unit] = New-Object System.Collections.Generic.List[object] }
     $num = [int]$m.Groups[1].Value
     $diff = if ($m.Groups[2].Success) { $m.Groups[2].Value } else { $null }
-    # 같은 번호에 난이도 표시가 있는 파일과 없는 파일이 같이 있으면, 표시가 있는 쪽을 우선함
-    if (-not $result[$book][$unit].Contains($num) -or $diff) { $result[$book][$unit][$num] = $diff }
+    $result[$book][$unit].Add([PSCustomObject]@{ Num = $num; Diff = $diff })
     $total++
   }
 
 $bookParts = foreach ($book in $result.Keys) {
   $unitParts = foreach ($unit in $result[$book].Keys) {
-    $numParts = foreach ($num in ($result[$book][$unit].Keys | Sort-Object)) {
-      $diff = $result[$book][$unit][$num]
-      $diffJson = if ($diff) { '"' + $diff + '"' } else { 'null' }
-      '"' + $num + '":' + $diffJson
+    # 같은 번호가 여러 번 나오면(예: _상 표시 있는 파일/없는 파일이 같이 있으면) 표시가 있는 쪽을 우선
+    $groups = $result[$book][$unit] | Group-Object Num | Sort-Object { [int]$_.Name }
+    $numParts = foreach ($g in $groups) {
+      $chosen = $g.Group | Where-Object { $_.Diff } | Select-Object -First 1
+      if (-not $chosen) { $chosen = $g.Group[0] }
+      $diffJson = if ($chosen.Diff) { '"' + $chosen.Diff + '"' } else { 'null' }
+      '"' + $g.Name + '":' + $diffJson
     }
     '"' + $unit + '":{' + ($numParts -join ',') + '}'
   }

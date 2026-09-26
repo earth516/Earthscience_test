@@ -363,7 +363,7 @@ function renderSidebar() {
   const unitN = code => currentCat === 'ox' ? oxCount(code) : currentCat === 'fill' ? fillCount(code) : countOf(currentCat, code);
   const unitBtn = u => {
     const n = unitN(u.code), active = currentUnit === u.code;
-    return `<button onclick="selectUnit('${u.code}')" class="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[13px] font-bold ml-3 w-[calc(100%-0.75rem)] transition-colors ${active ? '' : 'text-slate-600 hover:bg-slate-50'}" ${active ? 'style="background:var(--accent-soft);color:var(--accent)"' : ''}>
+    return `<button onclick="selectUnit('${u.code}')" class="w-full flex items-center gap-2 text-left pl-9 pr-3 py-2 rounded-lg text-[13px] font-bold transition-colors ${active ? '' : 'text-slate-600 hover:bg-slate-50'}" ${active ? 'style="background:var(--accent-soft);color:var(--accent)"' : ''}>
       <span class="flex-1 leading-snug">${u.title}</span>
       <span class="flex-shrink-0 text-[11px] tabular-nums ${n ? 'text-slate-500' : 'text-slate-300'}">${n}</span>
     </button>`;
@@ -376,10 +376,10 @@ function renderSidebar() {
         const key = `${bi}-${gi}`, open = expandedGroups.has(key), gActive = currentUnit === 'grp:' + key;
         const total = g.units.reduce((s, u) => s + unitN(u.code), 0);
         return `
-          <div onclick="selectGroup(${bi}, ${gi})" class="w-full flex items-center gap-2 text-left rounded-lg text-[13px] font-bold cursor-pointer ${gActive ? '' : 'text-slate-700 hover:bg-slate-50'}" ${gActive ? 'style="background:var(--accent-soft);color:var(--accent)"' : ''}>
-            <button onclick="event.stopPropagation(); toggleGroup('${key}')" class="flex-shrink-0 text-slate-400 text-[10px] transition-transform inline-block px-3 py-2 ${open ? 'rotate-90' : ''}">▶</button>
-            <span class="flex-1 leading-snug py-2">${g.title}</span>
-            <span class="flex-shrink-0 text-[11px] tabular-nums pr-3 ${total ? 'text-slate-500' : 'text-slate-300'}">${total}</span>
+          <div onclick="selectGroup(${bi}, ${gi})" class="relative w-full flex items-center gap-2 text-left pl-9 pr-3 py-2 rounded-lg text-[13px] font-bold cursor-pointer ${gActive ? '' : 'text-slate-700 hover:bg-slate-50'}" ${gActive ? 'style="background:var(--accent-soft);color:var(--accent)"' : ''}>
+            <button onclick="event.stopPropagation(); toggleGroup('${key}')" class="absolute left-2 top-1/2 -translate-y-1/2 flex-shrink-0 text-slate-400 text-[10px] transition-transform ${open ? 'rotate-90' : ''}">▶</button>
+            <span class="flex-1 leading-snug">${g.title}</span>
+            <span class="flex-shrink-0 text-[11px] tabular-nums ${total ? 'text-slate-500' : 'text-slate-300'}">${total}</span>
           </div>
           ${open ? g.units.map(u => unitBtn(u)).join('') : ''}`;
       }).join('')}
