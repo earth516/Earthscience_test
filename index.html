@@ -358,9 +358,9 @@ function renderSidebar() {
       <span class="flex-1">${label}</span><span class="text-[11px] tabular-nums ${n ? 'text-slate-500' : 'text-slate-300'}">${n}</span></button>`;
   }
   const unitN = code => currentCat === 'ox' ? oxCount(code) : currentCat === 'fill' ? fillCount(code) : countOf(currentCat, code);
-  const unitBtn = (u, indent) => {
+  const unitBtn = u => {
     const n = unitN(u.code), active = currentUnit === u.code;
-    return `<button onclick="selectUnit('${u.code}')" class="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[13px] transition-colors ${indent ? 'ml-3 w-[calc(100%-0.75rem)]' : ''} ${active ? 'font-bold' : 'text-slate-600 hover:bg-slate-50'}" ${active ? 'style="background:var(--accent-soft);color:var(--accent)"' : ''}>
+    return `<button onclick="selectUnit('${u.code}')" class="w-full flex items-center gap-2 text-left px-3 py-2 rounded-lg text-[13px] font-bold ml-3 w-[calc(100%-0.75rem)] transition-colors ${active ? '' : 'text-slate-600 hover:bg-slate-50'}" ${active ? 'style="background:var(--accent-soft);color:var(--accent)"' : ''}>
       <span class="flex-1 leading-snug">${u.title}</span>
       <span class="flex-shrink-0 text-[11px] tabular-nums ${n ? 'text-slate-500' : 'text-slate-300'}">${n}</span>
     </button>`;
@@ -369,7 +369,7 @@ function renderSidebar() {
     <div class="mb-5">
       <div class="px-2 mb-1 text-[13px] font-black text-slate-800">${big.title}</div>
       ${big.groups.map((g, gi) => {
-        if (!g.title) return g.units.map(u => unitBtn(u, false)).join('');
+        if (!g.title) return g.units.map(u => unitBtn(u)).join('');
         const key = `${bi}-${gi}`, open = expandedGroups.has(key);
         const total = g.units.reduce((s, u) => s + unitN(u.code), 0);
         return `
@@ -378,7 +378,7 @@ function renderSidebar() {
             <span class="flex-1 leading-snug">${g.title}</span>
             <span class="flex-shrink-0 text-[11px] tabular-nums ${total ? 'text-slate-500' : 'text-slate-300'}">${total}</span>
           </button>
-          ${open ? g.units.map(u => unitBtn(u, true)).join('') : ''}`;
+          ${open ? g.units.map(u => unitBtn(u)).join('') : ''}`;
       }).join('')}
     </div>`).join('');
 }
@@ -471,10 +471,10 @@ function showMockIntro() {
       </label>
       <div class="pl-6 space-y-1">
         ${big.groups.map((g, gi) => `
-          ${g.title ? `<label class="flex items-center gap-2 text-xs font-bold text-slate-500 pt-1.5 cursor-pointer">
+          ${g.title ? `<label class="flex items-center gap-2 text-[11px] font-bold text-slate-400 uppercase tracking-wide pt-2 cursor-pointer">
             <input type="checkbox" checked id="grp-${bi}-${gi}" onchange="toggleGroup2(${bi}, ${gi}, this.checked)" class="w-3.5 h-3.5 accent-amber-700">
             <span>${g.title}</span></label>` : ''}
-          ${g.units.map(u => `<label class="flex items-center gap-2 text-sm text-slate-600 cursor-pointer py-0.5">
+          ${g.units.map(u => `<label class="flex items-center gap-2 text-base font-semibold text-slate-700 cursor-pointer py-1">
             <input type="checkbox" checked name="mock-unit" value="${u.code}" data-big="${bi}" data-grp="${gi}" onchange="${g.title ? `syncGroup2(${bi}, ${gi})` : `syncBig(${bi})`}" class="w-4 h-4 accent-amber-700">
             <span class="flex-1">${u.title}</span></label>`).join('')}
         `).join('')}
