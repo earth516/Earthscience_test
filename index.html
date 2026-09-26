@@ -277,8 +277,10 @@ const booksIn = cat => BOOKS.filter(b => b.category === cat);
 const qPath = (bookId, code, n) => `${bookById[bookId].dir}/${code}/${n}번_문제.png`;
 const aPath = (bookId, code, n) => `${bookById[bookId].dir}/${code}/${n}번_해설.png`;
 
-const db = {};   // db[bookId][소단원코드] = [문제 번호들]  (manifest.json에서 읽어옴)
-BOOKS.forEach(b => { db[b.id] = {}; });
+const db = {};     // db[bookId][소단원코드] = [문제 번호들]  (manifest.json에서 읽어옴)
+const diffDb = {}; // diffDb[bookId][소단원코드][번호] = '상'|'중'|'하'|null  (파일명에 _상/_중/_하 표시가 있으면)
+BOOKS.forEach(b => { db[b.id] = {}; diffDb[b.id] = {}; });
+const DIFF_LABEL = { '상': { t: '상', c: '#dc2626', bg: '#fee2e2' }, '중': { t: '중', c: '#a16207', bg: '#fef3c7' }, '하': { t: '하', c: '#15803d', bg: '#dcfce7' } };
 
 const fallbackImg = text => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="260"><rect width="100%" height="100%" fill="#f1f5f9"/><text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-family="sans-serif" font-size="22" fill="#94a3b8">${text}</text></svg>`);
@@ -298,7 +300,8 @@ const isMock = () => currentCat === 'mock';
 
 function getQuestions(bookId, code) {
   // key: 시트에 저장되는 문제 이름 (예: practice/book1/1-1-2/17)
-  return (db[bookId][code] || []).map(n => ({ id: `${bookId}__${n}`, key: `${bookById[bookId].dir}/${code}/${n}`, bookId, code, number: n }));
+  const diffs = (diffDb[bookId] && diffDb[bookId][code]) || {};
+  return (db[bookId][code] || []).map(n => ({ id: `${bookId}__${n}`, key: `${bookById[bookId].dir}/${code}/${n}`, bookId, code, number: n, diff: diffs[n] || null }));
 }
 const bookOrder = Object.fromEntries(BOOKS.map((b, i) => [b.id, i]));
 const byBookThenNumber = (a, b) => (bookOrder[a.bookId] - bookOrder[b.bookId]) || (a.number - b.number);
@@ -518,6 +521,17 @@ function showMockIntro() {
         <legend class="font-bold text-slate-700 mb-3">출제 범위</legend>
         <div class="grid gap-3 md:grid-cols-3">${treeHtml}</div>
       </fieldset>
+      <fieldset class="mb-6">
+        <legend class="font-bold text-slate-700 mb-3">난이도 <span class="font-normal text-slate-400">(문제풀기에 _상/_중/_하 표시가 없으면 '중'으로 계산돼요)</span></legend>
+        <div class="grid gap-3 grid-cols-3">
+          <label class="flex items-center gap-2 bg-white rounded-xl border border-slate-200 px-4 py-3 cursor-pointer">
+            <input type="checkbox" name="mock-diff" value="하" checked class="w-4 h-4 accent-amber-700"><span class="font-bold" style="color:#15803d">하 (쉬움)</span></label>
+          <label class="flex items-center gap-2 bg-white rounded-xl border border-slate-200 px-4 py-3 cursor-pointer">
+            <input type="checkbox" name="mock-diff" value="중" checked class="w-4 h-4 accent-amber-700"><span class="font-bold" style="color:#a16207">중 (보통)</span></label>
+          <label class="flex items-center gap-2 bg-white rounded-xl border border-slate-200 px-4 py-3 cursor-pointer">
+            <input type="checkbox" name="mock-diff" value="상" checked class="w-4 h-4 accent-amber-700"><span class="font-bold" style="color:#dc2626">상 (어려움)</span></label>
+        </div>
+      </fieldset>
       <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
         <label class="flex items-center gap-2 text-sm font-bold text-slate-700">문제 수
           <select id="mock-count" class="p-2 border border-slate-200 rounded-lg bg-white">
@@ -554,12 +568,15 @@ window.syncGroup2 = function (bi, gi) {
 window.startMock = function () {
   const cats = [...document.querySelectorAll('input[name="mock-cat"]:checked')].map(c => c.value);
   const units = [...document.querySelectorAll('input[name="mock-unit"]:checked')].map(c => c.value);
+  const diffs = [...document.querySelectorAll('input[name="mock-diff"]:checked')].map(c => c.value);
   const want = Number($('mock-count').value);
   if (!cats.length) return showModal('문제풀기 중 하나 이상 골라주세요.');
   if (!units.length) return showModal('출제 범위를 하나 이상 골라주세요.');
+  if (!diffs.length) return showModal('난이도를 하나 이상 골라주세요.');
 
-  const pool = [];
+  let pool = [];
   cats.forEach(cat => units.forEach(code => pool.push(...catQuestions(cat, code))));
+  if (diffs.length < 3) pool = pool.filter(q => diffs.includes(q.diff || '중'));
   if (!pool.length) return showModal('고른 범위에 등록된 문제가 없어요.');
 
   // 무작위로 뽑은 뒤, 시험지처럼 단원 순서대로 정렬
@@ -647,7 +664,10 @@ function renderCards(questions, target, mock, offset = 0) {
     const u = unitByCode[q.code], book = bookById[q.bookId], cat = CATEGORIES[book.category];
     const label = `${offset + i + 1}번`;
     // 모의고사이거나, 그룹(소제목) 전체를 합쳐서 볼 때만 어느 소단원 문제인지 표시
-    const badges = (mock || (currentUnit && currentUnit.startsWith('grp:'))) ? `<span class="px-2 py-1 rounded text-[11px] font-bold bg-slate-100 text-slate-600">${u.title}</span>` : '';
+    const unitBadge = (mock || (currentUnit && currentUnit.startsWith('grp:'))) ? `<span class="px-2 py-1 rounded text-[11px] font-bold bg-slate-100 text-slate-600">${u.title}</span>` : '';
+    const dl = DIFF_LABEL[q.diff];   // 파일명에 _상/_중/_하 표시가 있는 문제만 난이도 배지 표시 (없으면 '중'으로 간주하되 배지는 생략)
+    const diffBadge = dl ? `<span class="px-2 py-1 rounded text-[11px] font-bold" style="color:${dl.c};background:${dl.bg}">${dl.t}</span>` : '';
+    const badges = diffBadge + unitBadge;
     const pen = (mode, color, cls, name) =>
       `<button onclick="setTool('${q.id}','${mode}','${color}',this)" data-tool="${q.id}" aria-label="${name}" class="${cls} ${color === '#111827' ? 'tool-active' : ''}"></button>`;
     return `
@@ -1356,7 +1376,8 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------------- 문제 목록 불러오기 ----------------
    manifest.json은 '문제목록 만들기.bat'을 더블클릭하면 만들어져요. (이미지를 추가할 때마다 다시 실행)
-   형식: { "practice/book1": { "1-1-1": [1, 2, 5], ... }, ... }                    */
+   형식: { "practice/book1": { "1-1-1": {"1":null, "2":"상"}, ... }, ... }
+   (파일명이 "2번_문제_상.png"처럼 난이도 표시가 없으면 null → 기본 "중"으로 처리)          */
 async function init() {
   setAccent(currentCat);
   await Promise.all([loadOx(), loadFill()]);
@@ -1366,7 +1387,16 @@ async function init() {
     const manifest = await res.json();
     BOOKS.forEach(b => {
       const units = manifest[b.dir] || {};
-      Object.keys(units).forEach(code => { db[b.id][code] = [...units[code]].sort((x, y) => x - y); });
+      Object.keys(units).forEach(code => {
+        const u = units[code];
+        if (Array.isArray(u)) {   // 예전 manifest.json 형식(난이도 없음)과도 계속 호환
+          db[b.id][code] = [...u].sort((x, y) => x - y);
+          diffDb[b.id][code] = {};
+        } else {
+          db[b.id][code] = Object.keys(u).map(Number).sort((x, y) => x - y);
+          diffDb[b.id][code] = u;
+        }
+      });
     });
     showWelcome();
     startSession();
