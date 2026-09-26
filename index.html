@@ -274,8 +274,8 @@ CURRICULUM.forEach((big, bi) => big.groups.forEach(g => g.units.forEach(u => UNI
 const unitByCode = Object.fromEntries(UNITS.map(u => [u.code, u]));
 const bookById = Object.fromEntries(BOOKS.map(b => [b.id, b]));
 const booksIn = cat => BOOKS.filter(b => b.category === cat);
-const qPath = (bookId, code, n) => `${bookById[bookId].dir}/${code}/${n}번_문제.png`;
-const aPath = (bookId, code, n) => `${bookById[bookId].dir}/${code}/${n}번_해설.png`;
+const qPath = (bookId, code, n, diff) => `${bookById[bookId].dir}/${code}/${n}번_문제${diff ? '_' + diff : ''}.png`;
+const aPath = (bookId, code, n, diff) => `${bookById[bookId].dir}/${code}/${n}번_해설${diff ? '_' + diff : ''}.png`;
 
 const db = {};     // db[bookId][소단원코드] = [문제 번호들]  (manifest.json에서 읽어옴)
 const diffDb = {}; // diffDb[bookId][소단원코드][번호] = '상'|'중'|'하'|null  (파일명에 _상/_중/_하 표시가 있으면)
@@ -609,7 +609,7 @@ function renderMockResult(short) {
             <figcaption class="flex justify-between items-center mb-1.5 text-xs">
               <b class="text-slate-800 flex-shrink-0">${i + 1}번</b><span class="text-slate-400 truncate ml-2 min-w-0">${unitByCode[q.code].title}</span>
             </figcaption>
-            <img src="${qPath(q.bookId, q.code, q.number)}" alt="${i + 1}번 문제" loading="lazy" class="w-full h-28 object-contain object-top bg-white rounded" onerror="this.onerror=null;this.src=FALLBACK_Q">
+            <img src="${qPath(q.bookId, q.code, q.number, q.diff)}" alt="${i + 1}번 문제" loading="lazy" class="w-full h-28 object-contain object-top bg-white rounded" onerror="this.onerror=null;this.src=FALLBACK_Q">
           </figure>`).join('')}
       </div>
     </div>`;
@@ -622,11 +622,11 @@ function renderPrintSheet() {
   $('print-sheet').innerHTML = `
     <div id="print-q">
       ${head(`${SUBJECT} 모의고사`, '이름 ______________')}
-      ${mockPicked.map((q, i) => `<section class="sheet-item"><div class="sheet-num">${i + 1}.</div><img src="${qPath(q.bookId, q.code, q.number)}" alt="" onerror="this.onerror=null;this.src=FALLBACK_Q"></section>`).join('')}
+      ${mockPicked.map((q, i) => `<section class="sheet-item"><div class="sheet-num">${i + 1}.</div><img src="${qPath(q.bookId, q.code, q.number, q.diff)}" alt="" onerror="this.onerror=null;this.src=FALLBACK_Q"></section>`).join('')}
     </div>
     <div id="print-a">
       ${head(`${SUBJECT} 모의고사 해설`, '')}
-      ${mockPicked.map((q, i) => `<section class="sheet-item"><div class="sheet-num">${i + 1}번 해설</div><img data-src="${aPath(q.bookId, q.code, q.number)}" alt=""></section>`).join('')}
+      ${mockPicked.map((q, i) => `<section class="sheet-item"><div class="sheet-num">${i + 1}번 해설</div><img data-src="${aPath(q.bookId, q.code, q.number, q.diff)}" alt=""></section>`).join('')}
     </div>`;
 }
 
@@ -692,7 +692,7 @@ function renderCards(questions, target, mock, offset = 0) {
 
         <div class="question-image-section border border-slate-100 rounded-xl p-3 bg-slate-50 flex justify-center">
           <div class="relative inline-block max-w-full">
-            <img id="img-${q.id}" src="${qPath(q.bookId, q.code, q.number)}" alt="${label} 문제" class="max-w-full h-auto rounded-lg select-none" draggable="false"
+            <img id="img-${q.id}" src="${qPath(q.bookId, q.code, q.number, q.diff)}" alt="${label} 문제" class="max-w-full h-auto rounded-lg select-none" draggable="false"
                  onload="setupCanvas('${q.id}')" onerror="this.onerror=null;this.src=FALLBACK_Q">
             <canvas id="cv-${q.id}" class="absolute inset-0 w-full h-full rounded-lg" style="pointer-events:none;touch-action:pinch-zoom"></canvas>
           </div>
@@ -706,7 +706,7 @@ function renderCards(questions, target, mock, offset = 0) {
       </div>
       <div id="ans-${q.id}" class="answer-section hidden border-t-2 border-dashed border-slate-200 bg-slate-50 p-5 md:p-7">
         <div class="border border-slate-200 rounded-xl p-3 bg-white flex justify-center">
-          <img src="${aPath(q.bookId, q.code, q.number)}" loading="lazy" alt="${label} 해설" class="max-w-full h-auto rounded-lg" onerror="this.onerror=null;this.src=FALLBACK_A">
+          <img src="${aPath(q.bookId, q.code, q.number, q.diff)}" loading="lazy" alt="${label} 해설" class="max-w-full h-auto rounded-lg" onerror="this.onerror=null;this.src=FALLBACK_A">
         </div>
       </div>
     </article>`;
