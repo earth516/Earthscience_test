@@ -290,6 +290,7 @@ const FALLBACK_A = fallbackImg('해설 이미지를 찾을 수 없어요');
 let currentCat = Object.keys(CATEGORIES).find(c => booksIn(c).length);  // 'practice' | 'fill' | 'ox' | 'mock'
 let currentUnit = null;
 let list = [], page = 1, isRandom = false;
+let lastPage = {};   // 카테고리+단원별로 마지막에 보던 페이지를 기억 (같은 단원에 다시 들어가면 이어서 보여줌)
 let isLocked = false;
 let mockPicked = [];
 let expandedGroups = new Set();   // 사이드바에서 펼쳐 놓은 소제목 그룹(예: '기압과 날씨 변화') 키 모음
@@ -413,7 +414,10 @@ window.selectGroup = function (bi, gi) {
   }
   currentUnit = scope;
   list = codes.flatMap(code => catQuestions(currentCat, code)).sort(byDifficulty);
-  page = 1; isRandom = false;
+  const pages2 = Math.max(1, Math.ceil(list.length / PER_PAGE));
+  const remembered2 = lastPage[currentCat + '|' + scope];
+  page = (remembered2 && remembered2 < pages2) ? remembered2 : 1;
+  isRandom = false;
   setHeader(g.title, `${CATEGORIES[currentCat].title} · ${list.length}문제`);
   renderSidebar(); renderPage(); closeSidebarMobile();
   $('scroll-area').scrollTo({ top: 0 });
@@ -435,7 +439,7 @@ function showWelcome() {
     <div class="fade-in text-center pt-16 md:pt-24">
       <p class="text-5xl mb-5">${cat.icon}</p>
       <h3 class="text-2xl font-black text-slate-800 mb-2">${cat.title}</h3>
-      <p class="text-slate-500">${total ? `총 ${total}문제가 준비되어 있어요.` : '아직 등록된 문제가 없어요. 소단원 폴더에 이미지를 올려 주세요.'}</p>
+      ${total ? '' : '<p class="text-slate-500">아직 등록된 문제가 없어요. 소단원 폴더에 이미지를 올려 주세요.</p>'}
       <p class="text-slate-400 text-sm mt-2">⭐ 문제 옆의 별표시를 누르면 그 문제를 저장해서 나중에 다시 볼 수 있어요.</p>
       <p class="md:hidden text-slate-400 text-sm mt-1">👈 아래 버튼을 누르면 단원을 고를 수 있는 사이드바(메뉴)가 나와요.</p>
       <button onclick="toggleSidebar()" class="md:hidden mt-6 px-5 py-2.5 rounded-xl text-white font-bold" style="background:var(--accent)">단원 고르기</button>
@@ -448,7 +452,11 @@ window.selectUnit = function (code) {
   if (currentCat === 'fill') return startFill(code);
   currentUnit = code;
   const u = unitByCode[code];
-  list = catQuestions(currentCat, code).sort(byDifficulty); page = 1; isRandom = false;
+  list = catQuestions(currentCat, code).sort(byDifficulty);
+  const pages1 = Math.max(1, Math.ceil(list.length / PER_PAGE));
+  const remembered1 = lastPage[currentCat + '|' + code];
+  page = (remembered1 && remembered1 < pages1) ? remembered1 : 1;   // 마지막까지 다 봤으면 처음부터, 아니면 이어서
+  isRandom = false;
   setHeader(u.title, `${CATEGORIES[currentCat].title} · ${[u.big, u.group].filter(Boolean).join(' / ')} · ${list.length}문제`);
   renderSidebar(); renderPage(); closeSidebarMobile();
   $('scroll-area').scrollTo({ top: 0 });
@@ -461,7 +469,10 @@ window.setSort = function (mode) {
 };
 window.changePage = function (d) {
   const pages = Math.max(1, Math.ceil(list.length / PER_PAGE));
-  page = Math.min(pages, Math.max(1, page + d));
+  page = page + d;
+  if (page > pages) page = 1;   // 마지막 페이지에서 다음으로 넘기면 처음으로
+  if (page < 1) page = pages;   // 첫 페이지에서 이전으로 넘기면 마지막으로
+  if (currentUnit) lastPage[currentCat + '|' + currentUnit] = page;
   renderPage(); $('scroll-area').scrollTo({ top: 0, behavior: 'smooth' });
 };
 
