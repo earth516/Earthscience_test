@@ -471,7 +471,7 @@ function renderPage() {
   content.innerHTML = `
     <div class="no-print flex justify-between items-center gap-2 bg-white p-2 md:p-3 rounded-2xl border border-slate-200 mb-4 md:mb-6">
       <div class="flex bg-slate-100 p-1 rounded-xl">
-        <button onclick="setSort('seq')" class="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm rounded-lg whitespace-nowrap ${seg(!isRandom, 'var(--accent)')}">순서대로</button>
+        <button onclick="setSort('seq')" class="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm rounded-lg whitespace-nowrap ${seg(!isRandom, 'var(--accent)')}">난이도 순</button>
         <button onclick="setSort('random')" class="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm rounded-lg whitespace-nowrap ${seg(isRandom, 'var(--mock)')}">랜덤으로</button>
       </div>
       <div class="flex items-center gap-2 md:gap-4">
