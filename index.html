@@ -305,6 +305,8 @@ function getQuestions(bookId, code) {
 }
 const bookOrder = Object.fromEntries(BOOKS.map((b, i) => [b.id, i]));
 const byBookThenNumber = (a, b) => (bookOrder[a.bookId] - bookOrder[b.bookId]) || (a.number - b.number);
+const DIFF_ORDER = { '하': 0, '중': 1, '상': 2 };   // 순서대로 정렬 시 난이도(저급→중급→고급) 우선, 같은 난이도끼리는 원래 순서
+const byDifficulty = (a, b) => (DIFF_ORDER[a.diff || '중'] - DIFF_ORDER[b.diff || '중']) || byBookThenNumber(a, b);
 // 카테고리 안 모든 교재의 해당 소단원 문제를 합쳐서
 const catQuestions = (cat, code) => booksIn(cat).flatMap(b => getQuestions(b.id, code));
 const countOf = (cat, code) => catQuestions(cat, code).length;
@@ -410,7 +412,7 @@ window.selectGroup = function (bi, gi) {
     return startFill(scope, items);
   }
   currentUnit = scope;
-  list = codes.flatMap(code => catQuestions(currentCat, code));
+  list = codes.flatMap(code => catQuestions(currentCat, code)).sort(byDifficulty);
   page = 1; isRandom = false;
   setHeader(g.title, `${CATEGORIES[currentCat].title} · ${list.length}문제`);
   renderSidebar(); renderPage(); closeSidebarMobile();
@@ -446,7 +448,7 @@ window.selectUnit = function (code) {
   if (currentCat === 'fill') return startFill(code);
   currentUnit = code;
   const u = unitByCode[code];
-  list = catQuestions(currentCat, code); page = 1; isRandom = false;
+  list = catQuestions(currentCat, code).sort(byDifficulty); page = 1; isRandom = false;
   setHeader(u.title, `${CATEGORIES[currentCat].title} · ${[u.big, u.group].filter(Boolean).join(' / ')} · ${list.length}문제`);
   renderSidebar(); renderPage(); closeSidebarMobile();
   $('scroll-area').scrollTo({ top: 0 });
@@ -454,7 +456,7 @@ window.selectUnit = function (code) {
 
 window.setSort = function (mode) {
   isRandom = mode === 'random'; page = 1;
-  if (isRandom) shuffle(list); else list.sort(byBookThenNumber);
+  if (isRandom) shuffle(list); else list.sort(byDifficulty);
   renderPage();
 };
 window.changePage = function (d) {
@@ -673,7 +675,7 @@ function renderCards(questions, target, mock, offset = 0) {
     <article class="q-card bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden fade-in">
       <div class="p-4 md:p-7">
         <div class="flex items-center justify-between gap-3 mb-4">
-          <h3 class="text-lg font-black flex items-center gap-1.5" style="color:${dl.c}">${label}${!mock && user ? `<button onclick="toggleStar('${q.id}')" id="star-${q.id}" aria-label="체크" title="체크해 두면 '체크한 문제'에서 모아 볼 수 있어요" class="w-9 h-9 -my-1 flex items-center justify-center rounded-lg text-2xl leading-none hover:bg-slate-50 ${starSet.has(q.key) ? 'text-amber-400' : 'text-slate-300'}">${starSet.has(q.key) ? '★' : '☆'}</button>` : ''}</h3>
+          <h3 class="text-[11px] font-bold flex items-center gap-1.5" style="color:${dl.c}">${label}${!mock && user ? `<button onclick="toggleStar('${q.id}')" id="star-${q.id}" aria-label="체크" title="체크해 두면 '체크한 문제'에서 모아 볼 수 있어요" class="w-9 h-9 -my-1 flex items-center justify-center rounded-lg text-2xl leading-none hover:bg-slate-50 ${starSet.has(q.key) ? 'text-amber-400' : 'text-slate-300'}">${starSet.has(q.key) ? '★' : '☆'}</button>` : ''}</h3>
           <div class="flex gap-1.5 flex-wrap justify-end">${badges}</div>
         </div>
 
