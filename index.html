@@ -494,7 +494,7 @@ function renderPage() {
   renderCards(list.slice((page - 1) * PER_PAGE, page * PER_PAGE), $('cards'), false, (page - 1) * PER_PAGE);
 }
 
-/* 대단원/그룹/소단원 체크박스 트리 (모의고사·OX·빈칸채우기 범위 고르기에서 공통으로 사용, 기본값은 전부 체크 해제) */
+/* 대단원/그룹/소단원 체크박스 트리 (모의고사 범위 고르기에서 사용, 기본값은 전부 체크 해제) */
 function rangeTreeHtml(countFn) {
   return CURRICULUM.map((big, bi) => `
     <div class="bg-white rounded-xl border border-slate-200 p-4">
@@ -515,6 +515,43 @@ function rangeTreeHtml(countFn) {
     </div>`).join('');
 }
 const selectedUnitCodes = () => [...document.querySelectorAll('input[name="mock-unit"]:checked')].map(c => c.value);
+
+/* 대단원/중단원 2단계 체크박스 트리 (OX·빈칸채우기 범위 고르기에서 사용) — 그룹(소제목)이 있으면 그룹 하나가 통째로 하나의 중단원,
+   그룹이 없으면 소단원 하나하나가 중단원. 소단원 단위까지는 들어가지 않아요. */
+function midTreeHtml(countFn) {
+  return CURRICULUM.map((big, bi) => {
+    const rows = big.groups.map((g, gi) => {
+      if (g.title) {
+        const codes = g.units.map(u => u.code);
+        const n = countFn ? codes.reduce((s, c) => s + countFn(c), 0) : null;
+        return `<label class="flex items-center gap-2 text-[13px] font-medium text-slate-600 cursor-pointer py-1">
+          <input type="checkbox" name="mid-unit" data-big="${bi}" data-codes="${codes.join(',')}" onchange="syncMidBig(${bi})" class="w-4 h-4 accent-amber-700">
+          <span class="flex-1">${g.title}</span>
+          ${n !== null ? `<span class="text-[11px] text-slate-400 tabular-nums">${n}</span>` : ''}</label>`;
+      }
+      return g.units.map(u => `<label class="flex items-center gap-2 text-[13px] font-medium text-slate-600 cursor-pointer py-1">
+        <input type="checkbox" name="mid-unit" data-big="${bi}" data-codes="${u.code}" onchange="syncMidBig(${bi})" class="w-4 h-4 accent-amber-700">
+        <span class="flex-1">${u.title}</span>
+        ${countFn ? `<span class="text-[11px] text-slate-400 tabular-nums">${countFn(u.code)}</span>` : ''}</label>`).join('');
+    }).join('');
+    return `<div class="bg-white rounded-xl border border-slate-200 p-4">
+      <label class="flex items-center gap-2 font-bold text-slate-800 cursor-pointer mb-2">
+        <input type="checkbox" id="midbig-${bi}" onchange="toggleMidBig(${bi}, this.checked)" class="w-4 h-4 accent-amber-700">${big.title}
+      </label>
+      <div class="pl-6 space-y-1">${rows}</div>
+    </div>`;
+  }).join('');
+}
+window.toggleMidBig = function (bi, on) {
+  document.querySelectorAll(`input[name="mid-unit"][data-big="${bi}"]`).forEach(cb => cb.checked = on);
+};
+window.syncMidBig = function (bi) {
+  const kids = [...document.querySelectorAll(`input[name="mid-unit"][data-big="${bi}"]`)];
+  const n = kids.filter(k => k.checked).length, big = $(`midbig-${bi}`);
+  if (big) { big.checked = n === kids.length; big.indeterminate = n > 0 && n < kids.length; }
+};
+const midSelectedCodes = () => [...document.querySelectorAll('input[name="mid-unit"]:checked')]
+  .flatMap(c => c.dataset.codes.split(','));
 
 /* ---------------- 모의고사 ---------------- */
 function showMockIntro() {
@@ -888,14 +925,14 @@ function showOxWelcome() {
     <div class="fade-in text-center pt-8 pb-2">
       <p class="text-5xl mb-4">⭕</p>
       <h3 class="text-2xl font-black text-slate-800 mb-2">OX 퀴즈</h3>
-      <p class="text-slate-500">${OX.length ? `총 ${OX.length}문장이 준비되어 있어요.` : '아직 문장이 없어요. ox.txt 파일을 올려 주세요.'}</p>
+      ${OX.length ? '' : '<p class="text-slate-500">아직 문장이 없어요. ox.txt 파일을 올려 주세요.</p>'}
       <p class="text-slate-400 text-sm mt-2">❌ 틀린 문장은 저장돼서 사이드바의 '틀린 문장'에서 다시 풀어 볼 수 있어요.</p>
       ${oxSkipped.length ? `<p class="text-xs text-amber-700 mt-2">단원을 찾지 못한 문장 ${oxSkipped.length}개는 빠졌어요.</p>` : ''}
     </div>
     <div class="no-print bg-slate-100/70 rounded-3xl border border-slate-200 p-5 md:p-8 fade-in">
       <fieldset class="mb-6">
         <legend class="font-bold text-slate-700 mb-3">풀 범위 고르기</legend>
-        <div class="grid gap-3 md:grid-cols-3">${rangeTreeHtml(oxCount)}</div>
+        <div class="grid gap-3 md:grid-cols-3">${midTreeHtml(oxCount)}</div>
       </fieldset>
       <div class="flex justify-end">
         <button onclick="startOxRange()" class="px-7 py-3 rounded-xl text-white font-bold shadow-sm" style="background:var(--accent)">고른 범위로 시작</button>
@@ -903,7 +940,7 @@ function showOxWelcome() {
     </div>`;
 }
 window.startOxRange = function () {
-  const codes = selectedUnitCodes();
+  const codes = midSelectedCodes();
   if (!codes.length) return showModal('범위를 하나 이상 골라주세요.');
   let items = OX.filter(x => codes.includes(x.code));
   if (ox.random) items = shuffle([...items]);
@@ -1093,15 +1130,15 @@ function showFillWelcome() {
     <div class="fade-in text-center pt-8 pb-2">
       <p class="text-5xl mb-4">✍️</p>
       <h3 class="text-2xl font-black text-slate-800 mb-2">빈칸채우기</h3>
-      <p class="text-slate-500">${FILL.length ? `총 ${FILL.length}문장이 준비되어 있어요.` : '아직 문장이 없어요. fill.txt 파일을 올려 주세요.'}</p>
-      <p class="text-slate-400 text-sm mt-2">빈칸에 들어갈 말을 입력하면 돼요. 한 문장에 빈칸이 여러 개면 전부 채우고 확인해야 해요. 띄어쓰기나 사소한 오타는 정답으로 봐줘요.</p>
-      <p class="text-slate-400 text-sm mt-1">❌ 틀린 문제는 저장돼서 사이드바의 '오답 노트'에서 다시 풀어 볼 수 있어요.</p>
+      ${FILL.length ? '' : '<p class="text-slate-500">아직 문장이 없어요. fill.txt 파일을 올려 주세요.</p>'}
+      <p class="text-slate-400 text-sm mt-2">교과서에 등장하는 문장 속 빈칸을 채워보자.<br>띄어쓰기나 사소한 오타는 정답으로 인정😉</p>
+      <p class="text-slate-400 text-sm mt-2">❎틀린 문제는 자동 저장으로 사이드바의 '오답 노트'에서<br>다시 풀어 볼 수 있어요!</p>
       ${fillSkipped.length ? `<p class="text-xs text-amber-700 mt-2">단원을 찾지 못했거나 빈칸([[ ]])이 없는 문장 ${fillSkipped.length}개는 빠졌어요.</p>` : ''}
     </div>
     <div class="no-print bg-slate-100/70 rounded-3xl border border-slate-200 p-5 md:p-8 fade-in">
       <fieldset class="mb-6">
         <legend class="font-bold text-slate-700 mb-3">풀 범위 고르기</legend>
-        <div class="grid gap-3 md:grid-cols-3">${rangeTreeHtml(fillCount)}</div>
+        <div class="grid gap-3 md:grid-cols-3">${midTreeHtml(fillCount)}</div>
       </fieldset>
       <div class="flex justify-end">
         <button onclick="startFillRange()" class="px-7 py-3 rounded-xl text-white font-bold shadow-sm" style="background:var(--accent)">고른 범위로 시작</button>
@@ -1109,7 +1146,7 @@ function showFillWelcome() {
     </div>`;
 }
 window.startFillRange = function () {
-  const codes = selectedUnitCodes();
+  const codes = midSelectedCodes();
   if (!codes.length) return showModal('범위를 하나 이상 골라주세요.');
   let items = FILL.filter(x => codes.includes(x.code));
   if (fill.random) items = shuffle([...items]);
