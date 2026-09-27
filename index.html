@@ -1414,8 +1414,78 @@ window.nextEssay = function () {
   essay.idx++; essay.revealed = false; essay.graded = null; essay.typed = '';
   renderEssay(); $('scroll-area').scrollTo({ top: 0, behavior: 'smooth' });
 };
+window.skipEssay = function () {   // 채점하지 않고(집계에 넣지 않고) 바로 다음 문제로
+  if (essay.idx >= essay.items.length - 1) return;
+  essay.idx++; essay.revealed = false; essay.graded = null; essay.typed = '';
+  renderEssay(); $('scroll-area').scrollTo({ top: 0, behavior: 'smooth' });
+};
 window.retryEssay = function (onlyWrong) {
   startEssay(essay.scope, onlyWrong ? shuffle([...essay.wrong]) : undefined);
+};
+
+/* ---- 서술형 입력: 타자로 입력 / 손으로 써보기(필기) ---- */
+let essayInputMode = 'type';   // 'type' | 'draw' (다음 문제에도 이어짐)
+const essayInk = {};           // essayInk[sid] = 그림 dataURL
+let essayPen = { color: '#111827', mode: 'pen', size: 'thin' };
+window.setEssayInputMode = function (mode) {
+  const el = $('essay-input'); if (el) essay.typed = el.value;
+  essayInputMode = mode;
+  renderEssay();
+};
+window.setEssayTool = function (mode, color, el) {
+  essayPen.mode = mode; if (color) essayPen.color = color;
+  document.querySelectorAll('[data-etool]').forEach(b => b.classList.remove('tool-active'));
+  if (el) el.classList.add('tool-active');
+};
+window.toggleEssaySize = function (el) {
+  essayPen.size = essayPen.size === 'normal' ? 'thin' : 'normal';
+  el.innerHTML = sizeIcon(essayPen.size);
+};
+window.clearEssayInk = function () {
+  const cv = $('essay-canvas'); if (cv) cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
+  const it = essay.items[essay.idx]; if (it) delete essayInk[it.sid];
+};
+window.setupEssayCanvas = function () {
+  const cv = $('essay-canvas');
+  if (!cv || cv.dataset.ready) return;
+  cv.dataset.ready = '1';
+  const rect = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = rect.width * dpr; cv.height = rect.height * dpr;
+  const ctx = cv.getContext('2d');
+  ctx.scale(dpr, dpr); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  const it = essay.items[essay.idx];
+  if (it && essayInk[it.sid]) {
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0, rect.width, rect.height);
+    img.src = essayInk[it.sid];
+  }
+  const pos = e => { const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  const st = { drawing: false, pid: null, last: null };
+  const touching = new Set();
+  cv.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    if (e.pointerType === 'touch') { touching.add(e.pointerId); if (touching.size > 1) return; }
+    if (st.drawing) return;
+    e.preventDefault(); cv.setPointerCapture(e.pointerId);
+    st.drawing = true; st.pid = e.pointerId; st.last = pos(e);
+  });
+  cv.addEventListener('pointermove', e => {
+    if (!st.drawing || e.pointerId !== st.pid) return;
+    e.preventDefault();
+    const p = pos(e);
+    ctx.globalCompositeOperation = essayPen.mode === 'eraser' ? 'destination-out' : 'source-over';
+    ctx.strokeStyle = essayPen.color;
+    ctx.lineWidth = essayPen.mode === 'eraser' ? 20 : PEN_WIDTH[essayPen.size];
+    ctx.beginPath(); ctx.moveTo(st.last.x, st.last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    st.last = p;
+  });
+  const end = e => {
+    touching.delete(e.pointerId);
+    if (!st.drawing || e.pointerId !== st.pid) return;
+    st.drawing = false; st.pid = null;
+    if (it) essayInk[it.sid] = cv.toDataURL();
+  };
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => cv.addEventListener(ev, end));
 };
 
 function renderEssay() {
@@ -1459,16 +1529,50 @@ function renderEssay() {
 
   // 문제 화면
   const it = essay.items[essay.idx], revealed = essay.revealed, graded = essay.graded;
+  const hasNext = essay.idx < n - 1;
   const wordsHtml = it.words.map(w => `<span class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">${w}</span>`).join('');
+  const epen = (color, cls, name) => `<button onclick="setEssayTool('pen','${color}',this)" data-etool aria-label="${name}" class="${cls} ${color === '#111827' ? 'tool-active' : ''}"></button>`;
+  const modeSeg = (on, color) => on ? `bg-white shadow-sm font-bold" style="color:${color}` : 'text-slate-500 hover:text-slate-700';
+  const inputHtml = `
+    <div class="mt-4">
+      <div class="flex bg-slate-100 p-1 rounded-xl w-fit mb-2">
+        <button onclick="setEssayInputMode('type')" class="px-3 py-1.5 text-xs md:text-sm rounded-lg whitespace-nowrap ${modeSeg(essayInputMode === 'type', 'var(--accent)')}">⌨️ 타자로 입력</button>
+        <button onclick="setEssayInputMode('draw')" class="px-3 py-1.5 text-xs md:text-sm rounded-lg whitespace-nowrap ${modeSeg(essayInputMode === 'draw', 'var(--accent)')}">✏️ 손으로 써보기</button>
+      </div>
+      ${essayInputMode === 'type'
+        ? `<textarea id="essay-input" rows="4" placeholder="여기에 직접 서술해 보세요 (선택)" class="w-full p-3 rounded-xl border border-slate-200 text-sm md:text-base leading-relaxed focus:outline-none focus:border-slate-400 bg-transparent">${essay.typed || ''}</textarea>`
+        : `<div class="border border-slate-200 rounded-xl overflow-hidden bg-white">
+            <div class="flex flex-nowrap items-center gap-2 px-2 py-1.5 border-b border-slate-100 bg-slate-50 text-[11px]">
+              ${epen('#111827', 'w-3.5 h-3.5 flex-shrink-0 rounded-full bg-gray-900', '검정 펜')}
+              ${epen('#ef4444', 'w-3.5 h-3.5 flex-shrink-0 rounded-full bg-red-500', '빨강 펜')}
+              ${epen('#3b82f6', 'w-3.5 h-3.5 flex-shrink-0 rounded-full bg-blue-500', '파랑 펜')}
+              <button onclick="toggleEssaySize(this)" aria-label="펜 굵기" title="펜 굵기" class="flex-shrink-0 w-6 h-5 flex items-center justify-center rounded bg-white border border-slate-200 text-slate-700">${sizeIcon(essayPen.size)}</button>
+              <button onclick="setEssayTool('eraser','',this)" data-etool class="font-bold text-slate-600 px-1.5 py-0.5 rounded">지우개</button>
+              <button onclick="clearEssayInk()" class="font-bold text-red-500 px-1.5 py-0.5 rounded hover:bg-red-50">모두 지우기</button>
+            </div>
+            <div class="relative" style="height:200px">
+              <canvas id="essay-canvas" class="absolute inset-0 w-full h-full" style="touch-action:none"></canvas>
+            </div>
+          </div>`}
+    </div>`;
   content.innerHTML = bar + `
     <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 md:p-8 fade-in">
       ${essay.scope === 'all' || essay.scope === 'wrong' || (typeof essay.scope === 'string' && (essay.scope.startsWith('grp:') || essay.scope.startsWith('sel:'))) ? `<p class="text-xs font-bold mb-3" style="color:var(--accent)">${unitByCode[it.code].title}</p>` : ''}
       <p class="text-lg md:text-xl font-bold text-slate-800 leading-relaxed break-keep">${it.q}</p>
       ${it.words.length ? `<div class="flex flex-wrap gap-2 mt-3">${wordsHtml}</div>` : ''}
-      ${revealed ? '' : `
-      <textarea id="essay-input" rows="4" placeholder="여기에 직접 서술해 보세요 (선택)" class="w-full mt-4 p-3 rounded-xl border border-slate-200 text-sm md:text-base leading-relaxed focus:outline-none focus:border-slate-400 bg-transparent">${essay.typed || ''}</textarea>
-      <div class="mt-4"><button onclick="revealEssay()" class="${BTN} text-white border-transparent" style="background:var(--accent)">정답 보기</button></div>`}
+      ${revealed ? '' : inputHtml}
+      ${revealed ? '' : `<div class="mt-4"><button onclick="revealEssay()" class="${BTN} text-white border-transparent" style="background:var(--accent)">정답 보기</button></div>`}
       ${revealed ? `
+      ${essayInputMode === 'type' && essay.typed.trim() ? `
+      <div class="mt-4 rounded-xl p-4 bg-white border border-slate-200">
+        <p class="text-xs font-bold text-slate-400 mb-1">내가 쓴 답</p>
+        <p class="text-sm md:text-base text-slate-700 leading-relaxed whitespace-pre-wrap">${essay.typed.replace(/</g, '&lt;')}</p>
+      </div>` : ''}
+      ${essayInputMode === 'draw' && essayInk[it.sid] ? `
+      <div class="mt-4 rounded-xl p-2 bg-white border border-slate-200">
+        <p class="text-xs font-bold text-slate-400 mb-1 px-1">내가 쓴 답</p>
+        <img src="${essayInk[it.sid]}" class="w-full rounded-lg" alt="내가 쓴 답">
+      </div>` : ''}
       <div class="mt-4 rounded-xl p-4 fade-in bg-slate-50 border border-slate-200">
         <p class="text-xs font-bold text-slate-400 mb-1">모범답안</p>
         <p class="text-sm md:text-base text-slate-700 leading-relaxed">${boldWords_(it.ans, it.words)}</p>
@@ -1481,6 +1585,8 @@ function renderEssay() {
           <button onclick="gradeEssay(false)" class="h-14 rounded-2xl border-2 border-red-200 text-red-500 font-black hover:bg-red-50">아쉬워요</button>
         </div>
       </div>` : ''}
+      ${!revealed && hasNext ? `<div class="mt-3"><button onclick="skipEssay()" class="text-xs font-bold text-slate-400 hover:text-slate-600">채점하지 않고 다음 문제로 건너뛰기 ▶</button></div>` : ''}
+      ${revealed && graded === null && hasNext ? `<div class="mt-3"><button onclick="skipEssay()" class="text-xs font-bold text-slate-400 hover:text-slate-600">채점하지 않고 다음 문제로 건너뛰기 ▶</button></div>` : ''}
       ${graded !== null ? `
       <div class="mt-5 rounded-xl p-4 fade-in ${graded ? 'bg-emerald-50' : 'bg-red-50'}">
         <p class="font-black ${graded ? 'text-emerald-700' : 'text-red-600'}">${graded ? '잘했어요!' : '다시 볼 문제에 저장했어요.'}</p>
@@ -1490,6 +1596,7 @@ function renderEssay() {
         <button onclick="nextEssay()" class="${BTN} text-white border-transparent" style="background:var(--accent)">${essay.idx + 1 >= n ? '결과 보기' : '다음 ▶'}</button>
       </div>` : ''}
     </article>`;
+  if (!revealed && essayInputMode === 'draw') setupEssayCanvas();
 }
 
 /* ================= 로그인 · 기록 연동 ================= */
