@@ -127,9 +127,10 @@
    ① 큰 카테고리
    ============================================================ */
 const CATEGORIES = {
-  practice: { title: '문제풀기',   icon: '📖', color: '#0f766e', soft: '#e6f4f1' },
-  fill:     { title: '빈칸채우기', icon: '✍️', color: '#1d4ed8', soft: '#e8eefc' },
-  ox:       { title: 'OX 퀴즈',   icon: '⭕', color: '#7c3aed', soft: '#f1ecfe' },
+  practice: { title: '문제풀기',     icon: '📖', color: '#0f766e', soft: '#e6f4f1' },
+  fill:     { title: '빈칸채우기',   icon: '✍️', color: '#1d4ed8', soft: '#e8eefc' },
+  ox:       { title: 'OX 퀴즈',     icon: '⭕', color: '#7c3aed', soft: '#f1ecfe' },
+  essay:    { title: '서술형 연습', icon: '✏️', color: '#be123c', soft: '#ffe4e6' },
 };
 
 /* ============================================================
@@ -334,10 +335,11 @@ function showModal(msg, locked = false) {
 function closeModal(force = false) { if (!isLocked || force) { isLocked = false; $('modal').classList.add('hidden'); } }
 
 /* ---------------- 사이드바 ---------------- */
+const TAB_LABEL = { practice: '문제', fill: '빈칸', ox: 'O,X', essay: '서술형' };   // 카테고리 탭에는 짧은 이름으로 표시 (화면 안의 다른 제목들은 원래 이름 그대로)
 function renderSidebar() {
   // 카테고리 탭
-  const tabs = Object.entries(CATEGORIES).filter(([k]) => k === 'ox' || k === 'fill' || booksIn(k).length)
-    .map(([k, c]) => ({ k, label: c.title, icon: c.icon, color: c.color }))
+  const tabs = Object.entries(CATEGORIES).filter(([k]) => k === 'ox' || k === 'fill' || k === 'essay' || booksIn(k).length)
+    .map(([k, c]) => ({ k, label: TAB_LABEL[k] || c.title, icon: c.icon, color: c.color }))
     .concat({ k: 'mock', label: '모의고사', icon: '📝', color: 'var(--mock)' });
   const catTabs = $('cat-tabs');
   catTabs.style.gridTemplateColumns = `repeat(${tabs.length}, minmax(0, 1fr))`;
@@ -355,15 +357,15 @@ function renderSidebar() {
   // 로그인했을 때만: 체크한 문제 / 틀린 OX 모음
   let collect = '';
   if (user) {
-    const isOx = currentCat === 'ox', isFill = currentCat === 'fill';
-    const n = isOx ? oxWrongItems().length : isFill ? fillWrongItems().length : starredIn(currentCat).length;
-    const key = (isOx || isFill) ? '__wrong' : '__star', active = currentUnit === key;
-    const label = isOx ? '❌ 틀린 문장' : isFill ? '❌ 오답 노트' : '⭐ 체크한 문제';
-    const action = isOx ? "startOx('wrong')" : isFill ? "startFill('wrong')" : 'selectStarred()';
+    const isOx = currentCat === 'ox', isFill = currentCat === 'fill', isEssay = currentCat === 'essay';
+    const n = isOx ? oxWrongItems().length : isFill ? fillWrongItems().length : isEssay ? essayWrongItems().length : starredIn(currentCat).length;
+    const key = (isOx || isFill || isEssay) ? '__wrong' : '__star', active = currentUnit === key;
+    const label = isOx ? '❌ 틀린 문장' : isFill ? '❌ 오답 노트' : isEssay ? '❌ 다시 볼 문제' : '⭐ 체크한 문제';
+    const action = isOx ? "startOx('wrong')" : isFill ? "startFill('wrong')" : isEssay ? "startEssay('wrong')" : 'selectStarred()';
     collect = `<button onclick="${action}" class="w-full flex items-center gap-2 text-left px-3 py-2.5 mb-4 rounded-xl border text-[13px] font-bold transition-colors ${active ? '' : 'border-slate-200 text-slate-700 hover:bg-slate-50'}" ${active ? 'style="background:var(--accent-soft);color:var(--accent);border-color:transparent"' : ''}>
       <span class="flex-1">${label}</span><span class="text-[11px] tabular-nums ${n ? 'text-slate-500' : 'text-slate-300'}">${n}</span></button>`;
   }
-  const unitN = code => currentCat === 'ox' ? oxCount(code) : currentCat === 'fill' ? fillCount(code) : countOf(currentCat, code);
+  const unitN = code => currentCat === 'ox' ? oxCount(code) : currentCat === 'fill' ? fillCount(code) : currentCat === 'essay' ? essayCount(code) : countOf(currentCat, code);
   const unitBtn = u => {
     const n = unitN(u.code), active = currentUnit === u.code;
     return `<button onclick="selectUnit('${u.code}')" class="w-full flex items-center gap-2 text-left pl-9 pr-3 py-2 rounded-lg text-[13px] font-bold transition-colors ${active ? '' : 'text-slate-600 hover:bg-slate-50'}" ${active ? 'style="background:var(--accent-soft);color:var(--accent)"' : ''}>
@@ -412,6 +414,11 @@ window.selectGroup = function (bi, gi) {
     if (fill.random) items = shuffle([...items]);
     return startFill(scope, items);
   }
+  if (currentCat === 'essay') {
+    let items = ESSAY.filter(x => codes.includes(x.code));
+    if (essay.random) items = shuffle([...items]);
+    return startEssay(scope, items);
+  }
   currentUnit = scope;
   list = codes.flatMap(code => catQuestions(currentCat, code)).sort(byDifficulty);
   const pages2 = Math.max(1, Math.ceil(list.length / PER_PAGE));
@@ -433,6 +440,7 @@ function showWelcome() {
   currentUnit = null; renderSidebar();
   if (currentCat === 'ox') return showOxWelcome();
   if (currentCat === 'fill') return showFillWelcome();
+  if (currentCat === 'essay') return showEssayWelcome();
   const cat = CATEGORIES[currentCat], total = catTotal(currentCat);
   setHeader(cat.title, '왼쪽 메뉴에서 소단원을 누르면 문제가 나와요.');
   content.innerHTML = `
@@ -450,6 +458,7 @@ function showWelcome() {
 window.selectUnit = function (code) {
   if (currentCat === 'ox') return startOx(code);
   if (currentCat === 'fill') return startFill(code);
+  if (currentCat === 'essay') return startEssay(code);
   currentUnit = code;
   const u = unitByCode[code];
   list = catQuestions(currentCat, code).sort(byDifficulty);
@@ -1291,6 +1300,198 @@ function renderFill() {
     </article>`;
 }
 
+/* ================= 서술형 연습 =================
+   essay.txt (탭으로 구분)  대단원 | 소단원 | 질문 | 제시단어(쉼표로 구분) | 모범답안
+   정답은 O/X 자동채점이 아니라, 모범답안을 본 뒤 본인이 스스로 맞았는지 표시하는 방식이에요.  */
+let ESSAY = [], essaySkipped = [];
+function parseEssay(text) {
+  const out = [], skipped = [];
+  const unq = c => { c = c.trim(); return (c.startsWith('"') && c.endsWith('"')) ? c.slice(1, -1).replace(/""/g, '"') : c; };
+  text.split(/\r?\n/).forEach(line => {
+    const c = line.split('\t').map(unq);
+    if (c.length < 5 || !c[2] || c[2] === '질문' || !c[4]) return;
+    const code = matchUnit(c[1]);
+    const words = (c[3] || '').split(/[,、]/).map(s => s.trim()).filter(Boolean);
+    if (!code) { skipped.push(c[1] + ' / ' + c[2]); return; }
+    out.push({ code, q: c[2], words, ans: c[4], sid: hashId('ESSAY::' + c[2]) });
+  });
+  return { out, skipped };
+}
+async function loadEssay() {
+  try {
+    const r = await fetch('essay.txt', { cache: 'no-store' });
+    if (!r.ok) return;
+    const { out, skipped } = parseEssay(decodeText(await r.arrayBuffer()));
+    ESSAY = out; essaySkipped = skipped;
+    if (skipped.length) console.warn('서술형 연습: 단원을 찾지 못한 문항', skipped);
+  } catch (e) { console.warn('essay.txt 파일을 읽지 못했어요', e); }
+}
+const essayCount = code => ESSAY.filter(x => x.code === code).length;
+const essayWrongItems = () => ESSAY.filter(x => oxWrongSet.has(x.sid));   // 채점 기록은 OX와 같은 서버 칸을 같이 써요
+function escapeReg_(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function boldWords_(text, words) {
+  let out = text;
+  [...words].filter(Boolean).sort((a, b) => b.length - a.length).forEach(w => {
+    out = out.replace(new RegExp(escapeReg_(w), 'g'), `<b class="text-blue-600">${w}</b>`);
+  });
+  return out;
+}
+
+let essay = { scope: null, items: [], idx: 0, right: 0, wrong: [], revealed: false, graded: null, typed: '', random: false };
+
+function showEssayWelcome() {
+  setHeader('서술형 연습', '범위를 고르고 시작하거나, 왼쪽 메뉴에서 소단원을 눌러도 돼요.');
+  content.innerHTML = `
+    <div class="fade-in text-center pt-8 pb-2">
+      <p class="text-5xl mb-4">✏️</p>
+      <h3 class="text-2xl font-black text-slate-800 mb-2">서술형 연습</h3>
+      ${ESSAY.length ? '' : '<p class="text-slate-500">아직 문항이 없어요. essay.txt 파일을 올려 주세요.</p>'}
+      <p class="text-slate-400 text-sm mt-2">제시된 단어를 모두 넣어서 직접 서술해 보고,<br>모범답안과 비교하며 스스로 채점해 보자.</p>
+      <p class="text-slate-400 text-sm mt-2">❎ 스스로 틀렸다고 표시한 문제는 사이드바의 '다시 볼 문제'에서<br>다시 볼 수 있어요!</p>
+      ${essaySkipped.length ? `<p class="text-xs text-amber-700 mt-2">단원을 찾지 못한 문항 ${essaySkipped.length}개는 빠졌어요.</p>` : ''}
+    </div>
+    <div class="no-print bg-slate-100/70 rounded-3xl border border-slate-200 p-5 md:p-8 fade-in">
+      <fieldset class="mb-6">
+        <legend class="font-bold text-slate-700 mb-3">풀 범위 고르기</legend>
+        <div class="grid gap-3 md:grid-cols-3">${midTreeHtml(essayCount)}</div>
+      </fieldset>
+      <div class="flex justify-end">
+        <button onclick="startEssayRange()" class="px-7 py-3 rounded-xl text-white font-bold shadow-sm" style="background:var(--accent)">고른 범위로 시작</button>
+      </div>
+    </div>`;
+}
+window.startEssayRange = function () {
+  const codes = midSelectedCodes();
+  if (!codes.length) return showModal('범위를 하나 이상 골라주세요.');
+  let items = ESSAY.filter(x => codes.includes(x.code));
+  if (essay.random) items = shuffle([...items]);
+  startEssay('sel:' + codes.join(','), items);
+};
+
+window.startEssay = function (scope, items) {
+  const isGrp = typeof scope === 'string' && scope.startsWith('grp:');
+  const isSel = typeof scope === 'string' && scope.startsWith('sel:');
+  currentUnit = scope === 'all' ? null : scope === 'wrong' ? '__wrong' : scope;
+  if (!items) {
+    items = scope === 'wrong' ? essayWrongItems()
+      : isGrp ? ESSAY.filter(x => groupOf_(scope).units.some(u => u.code === x.code))
+      : isSel ? ESSAY.filter(x => scope.slice(4).split(',').includes(x.code))
+      : ESSAY.filter(x => scope === 'all' || x.code === scope);
+    if (essay.random) items = shuffle([...items]);
+  }
+  essay = { ...essay, scope, items, idx: 0, right: 0, wrong: [], revealed: false, graded: null, typed: '' };
+  const u = unitByCode[scope];
+  const title = u ? u.title : scope === 'wrong' ? '다시 볼 문제 다시 풀기' : isGrp ? groupOf_(scope).title : isSel ? '고른 범위 · 서술형 연습' : '서술형 연습 · 전체';
+  setHeader(title, `서술형 연습 · ${items.length}문항`);
+  renderSidebar(); renderEssay(); closeSidebarMobile();
+  $('scroll-area').scrollTo({ top: 0 });
+};
+window.setEssaySort = function (mode) {
+  essay.random = mode === 'random';
+  startEssay(essay.scope);
+};
+window.revealEssay = function () {
+  const it = essay.items[essay.idx];
+  if (!it || essay.revealed) return;
+  const el = $('essay-input'); if (el) essay.typed = el.value;
+  essay.revealed = true;
+  renderEssay();
+};
+window.gradeEssay = function (correct) {
+  const it = essay.items[essay.idx];
+  if (!it || !essay.revealed || essay.graded !== null) return;
+  essay.graded = correct;
+  if (correct) essay.right++; else essay.wrong.push(it);
+  if (user) {
+    if (correct) oxWrongSet.delete(it.sid); else oxWrongSet.add(it.sid);
+    queueOp({ t: 'ox', sid: it.sid, text: it.q, correct });
+    renderSidebar();
+  }
+  renderEssay();
+};
+window.nextEssay = function () {
+  if (essay.graded === null) return;
+  essay.idx++; essay.revealed = false; essay.graded = null; essay.typed = '';
+  renderEssay(); $('scroll-area').scrollTo({ top: 0, behavior: 'smooth' });
+};
+window.retryEssay = function (onlyWrong) {
+  startEssay(essay.scope, onlyWrong ? shuffle([...essay.wrong]) : undefined);
+};
+
+function renderEssay() {
+  const n = essay.items.length;
+  if (!n) {
+    content.innerHTML = `<div class="bg-white p-10 rounded-2xl border border-slate-200 text-center text-slate-500">${essay.scope === 'wrong' ? '다시 볼 문제가 없어요. 👍' : '이 소단원에는 아직 서술형 문항이 없어요.'}</div>`;
+    return;
+  }
+  const seg = (on, color) => on ? `bg-white shadow-sm font-bold" style="color:${color}` : 'text-slate-500 hover:text-slate-700';
+  const bar = `
+    <div class="flex justify-between items-center gap-2 bg-white p-2 md:p-3 rounded-2xl border border-slate-200 mb-4 md:mb-6">
+      <div class="flex bg-slate-100 p-1 rounded-xl">
+        <button onclick="setEssaySort('seq')" class="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm rounded-lg whitespace-nowrap ${seg(!essay.random, 'var(--accent)')}">순서대로</button>
+        <button onclick="setEssaySort('random')" class="px-3 md:px-4 py-1.5 md:py-2 text-xs md:text-sm rounded-lg whitespace-nowrap ${seg(essay.random, 'var(--mock)')}">랜덤으로</button>
+      </div>
+      <div class="text-sm font-bold tabular-nums pr-2">${Math.min(essay.idx + 1, n)} <span class="text-slate-400 font-normal">/ ${n}</span></div>
+    </div>
+    <div class="h-1.5 bg-slate-200 rounded-full mb-5 overflow-hidden"><div class="h-full rounded-full transition-all" style="width:${essay.idx / n * 100}%;background:var(--accent)"></div></div>`;
+
+  // 결과 화면
+  if (essay.idx >= n) {
+    const pct = Math.round(essay.right / n * 100);
+    content.innerHTML = bar + `
+      <div class="bg-white rounded-2xl border border-slate-200 p-6 md:p-8 fade-in text-center">
+        <p class="text-5xl mb-3">${pct >= 90 ? '🏆' : pct >= 70 ? '👍' : '💪'}</p>
+        <h3 class="text-2xl font-black text-slate-800">${n}문항 중 ${essay.right}개 맞혔어요</h3>
+        <p class="text-slate-500 mt-1">정답률 ${pct}%</p>
+        <div class="flex justify-center flex-wrap gap-2 mt-6">
+          ${essay.wrong.length ? `<button onclick="retryEssay(true)" class="${BTN} text-white border-transparent" style="background:var(--accent)">다시 볼 문제만 다시</button>` : ''}
+          <button onclick="retryEssay(false)" class="${BTN} bg-white border-slate-200 text-slate-600">처음부터 다시</button>
+        </div>
+      </div>
+      ${essay.wrong.length ? `<h4 class="font-bold text-slate-700 mt-8 mb-3">다시 볼 문제 ${essay.wrong.length}개</h4>
+      <div class="space-y-3">${essay.wrong.map(w => `
+        <div class="bg-white rounded-xl border border-slate-200 p-4">
+          <p class="font-medium text-slate-800 leading-relaxed">${w.q}</p>
+          <p class="text-sm text-slate-500 mt-2 leading-relaxed">${boldWords_(w.ans, w.words)}</p>
+        </div>`).join('')}</div>` : ''}`;
+    return;
+  }
+
+  // 문제 화면
+  const it = essay.items[essay.idx], revealed = essay.revealed, graded = essay.graded;
+  const wordsHtml = it.words.map(w => `<span class="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold">${w}</span>`).join('');
+  content.innerHTML = bar + `
+    <article class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 md:p-8 fade-in">
+      ${essay.scope === 'all' || essay.scope === 'wrong' || (typeof essay.scope === 'string' && (essay.scope.startsWith('grp:') || essay.scope.startsWith('sel:'))) ? `<p class="text-xs font-bold mb-3" style="color:var(--accent)">${unitByCode[it.code].title}</p>` : ''}
+      <p class="text-lg md:text-xl font-bold text-slate-800 leading-relaxed break-keep">${it.q}</p>
+      ${it.words.length ? `<div class="flex flex-wrap gap-2 mt-3">${wordsHtml}</div>` : ''}
+      ${revealed ? '' : `
+      <textarea id="essay-input" rows="4" placeholder="여기에 직접 서술해 보세요 (선택)" class="w-full mt-4 p-3 rounded-xl border border-slate-200 text-sm md:text-base leading-relaxed focus:outline-none focus:border-slate-400 bg-transparent">${essay.typed || ''}</textarea>
+      <div class="mt-4"><button onclick="revealEssay()" class="${BTN} text-white border-transparent" style="background:var(--accent)">정답 보기</button></div>`}
+      ${revealed ? `
+      <div class="mt-4 rounded-xl p-4 fade-in bg-slate-50 border border-slate-200">
+        <p class="text-xs font-bold text-slate-400 mb-1">모범답안</p>
+        <p class="text-sm md:text-base text-slate-700 leading-relaxed">${boldWords_(it.ans, it.words)}</p>
+      </div>` : ''}
+      ${revealed && graded === null ? `
+      <div class="mt-4">
+        <p class="text-sm font-bold text-slate-600 mb-2">내가 쓴 답과 비교해서, 스스로 채점해 보세요.</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button onclick="gradeEssay(true)" class="h-14 rounded-2xl border-2 border-emerald-200 text-emerald-600 font-black hover:bg-emerald-50">맞았어요</button>
+          <button onclick="gradeEssay(false)" class="h-14 rounded-2xl border-2 border-red-200 text-red-500 font-black hover:bg-red-50">아쉬워요</button>
+        </div>
+      </div>` : ''}
+      ${graded !== null ? `
+      <div class="mt-5 rounded-xl p-4 fade-in ${graded ? 'bg-emerald-50' : 'bg-red-50'}">
+        <p class="font-black ${graded ? 'text-emerald-700' : 'text-red-600'}">${graded ? '잘했어요!' : '다시 볼 문제에 저장했어요.'}</p>
+      </div>
+      <div class="flex items-center justify-between gap-2 border-t border-slate-100 mt-5 pt-4">
+        <span class="text-sm text-slate-500">맞힘 <b class="text-emerald-600">${essay.right}</b> · 다시 볼 <b class="text-red-500">${essay.wrong.length}</b></span>
+        <button onclick="nextEssay()" class="${BTN} text-white border-transparent" style="background:var(--accent)">${essay.idx + 1 >= n ? '결과 보기' : '다음 ▶'}</button>
+      </div>` : ''}
+    </article>`;
+}
+
 /* ================= 로그인 · 기록 연동 ================= */
 let user = null;                 // { id, pw, name }
 let starSet = new Set();         // 체크한 문제 key
@@ -1483,7 +1684,7 @@ document.addEventListener('visibilitychange', () => {
 async function init() {
   document.body.classList.add('sidebar-collapsed');   // 처음 들어오면 사이드바는 접어 두고, 메뉴 버튼으로 열게
   setAccent(currentCat);
-  await Promise.all([loadOx(), loadFill()]);
+  await Promise.all([loadOx(), loadFill(), loadEssay()]);
   try {
     const res = await fetch('manifest.json', { cache: 'no-store' });
     if (!res.ok) throw new Error(res.status);
