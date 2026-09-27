@@ -724,7 +724,7 @@ window.toggleAnswer = function (id) {
 /* ---------------- 필기 (페이지를 넘겨도 유지) ---------------- */
 const ink = {}, pens = {};
 const PEN_WIDTH = { normal: 2.5, thin: 1.2 };   // 펜 굵기 2단계
-let penSize = 'normal';
+let penSize = 'thin';
 let penSeen = false;                              // 펜(스타일러스)을 쓴 적이 있는지                           // 마지막으로 고른 굵기 (다음 문제에도 이어짐)
 const sizeIcon = size => `<svg width="14" height="14" viewBox="0 0 14 14"><line x1="2" y1="12" x2="12" y2="2" stroke="currentColor" stroke-linecap="round" stroke-width="${size === 'thin' ? 1.2 : 3}"/></svg>`;
 window.toggleSize = function (id, el) {
@@ -1185,7 +1185,6 @@ function renderFill() {
         <button onclick="nextFill()" ${done ? '' : 'disabled'} class="${BTN} text-white border-transparent" style="background:var(--accent)">${fill.idx + 1 >= n ? '결과 보기' : '다음 ▶'}</button>
       </div>
     </article>`;
-  if (!done) setTimeout(() => { const el = $('fill-input-0'); if (el) el.focus(); }, 30);
 }
 
 /* ================= 로그인 · 기록 연동 ================= */
